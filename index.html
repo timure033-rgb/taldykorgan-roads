@@ -1,0 +1,681 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<title>Дороги Талдыкоргана</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛣️</text></svg>">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  :root{
+    --bg:#f8fafc; --card:#ffffff; --text:#0f172a; --muted:#64748b; --line:#e2e8f0;
+    --accent:#2563eb; --head:#111827; --soft:#f1f5f9;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#0b1220; --card:#111827; --text:#e5e7eb; --muted:#94a3b8; --line:#1f2937; --head:#030712; --soft:#1f2937; }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;-webkit-tap-highlight-color:transparent}
+  body{display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidden}
+  button{font:inherit;cursor:pointer}
+
+  /* Верхняя панель */
+  #top{background:var(--head);color:#fff;padding:calc(env(safe-area-inset-top) + 8px) 14px 8px;z-index:1000;flex:none}
+  #top .t{font-weight:700;font-size:16px;letter-spacing:.2px}
+  #cityStats{font-size:13px;opacity:.92;margin-top:2px;line-height:1.35}
+  #cityStats b{font-size:15px}
+  #demo{display:none;margin-top:6px;font-size:12px;background:#f59e0b;color:#111;border-radius:8px;padding:4px 8px}
+
+  /* Карта */
+  #main{position:relative;flex:1;min-height:0}
+  #map{position:absolute;inset:0;background:#e5e7eb}
+  #legend{position:absolute;left:10px;bottom:calc(26px + env(safe-area-inset-bottom));z-index:500;
+    background:var(--card);color:var(--text);border-radius:10px;padding:6px 8px;font-size:11px;
+    box-shadow:0 2px 10px rgba(0,0,0,.2)}
+  #legend .bar{display:flex;gap:2px;margin-top:3px}
+  #legend .bar span{width:22px;height:8px;border-radius:2px;display:block}
+  #legend .row{display:flex;justify-content:space-between;color:var(--muted)}
+  #fabs{position:absolute;right:12px;bottom:calc(28px + env(safe-area-inset-bottom));z-index:500;display:flex;flex-direction:column;gap:10px}
+  #fabs button{width:52px;height:52px;border-radius:50%;border:none;background:var(--card);color:var(--text);
+    font-size:22px;box-shadow:0 3px 12px rgba(0,0,0,.25)}
+  #btnLocate.on{background:var(--accent);color:#fff}
+
+  #loading{position:absolute;inset:0;z-index:900;display:flex;align-items:center;justify-content:center;
+    background:rgba(15,23,42,.35);padding:20px}
+  #loading .box{background:var(--card);color:var(--text);border-radius:14px;padding:16px 18px;max-width:320px;
+    text-align:center;box-shadow:0 8px 30px rgba(0,0,0,.3);font-size:14px;line-height:1.4}
+  .spin{width:28px;height:28px;border:3px solid var(--line);border-top-color:var(--accent);border-radius:50%;
+    margin:0 auto 10px;animation:sp 1s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+
+  #toast{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 70px);transform:translateX(-50%) translateY(-20px);
+    background:#111827;color:#fff;padding:10px 14px;border-radius:10px;font-size:14px;z-index:2000;
+    opacity:0;pointer-events:none;transition:.25s;max-width:92vw;text-align:center}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  /* Нижняя панель (на телефоне) / боковая (на компьютере) */
+  #sheet{position:fixed;left:0;right:0;bottom:0;max-height:60vh;max-height:60dvh;background:var(--card);color:var(--text);
+    border-radius:18px 18px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.25);z-index:1100;
+    transform:translateY(105%);transition:transform .25s ease;display:flex;flex-direction:column}
+  #sheet.open{transform:none}
+  #sheet .head{flex:none;display:flex;align-items:center;justify-content:center;position:relative;padding:8px 0 2px}
+  #sheet .grab{width:42px;height:5px;border-radius:3px;background:var(--line)}
+  #sheet .close{position:absolute;right:8px;top:4px;border:none;background:var(--soft);color:var(--text);
+    width:34px;height:34px;border-radius:50%;font-size:16px}
+  #sheetBody{overflow-y:auto;padding:0 16px calc(18px + env(safe-area-inset-bottom));-webkit-overflow-scrolling:touch}
+  @media (min-width:800px){
+    #sheet{left:auto;right:12px;top:80px;bottom:12px;width:400px;max-height:none;border-radius:16px;transform:translateX(115%)}
+    #sheet.open{transform:none}
+    #fabs{right:12px}
+  }
+
+  h2{font-size:19px;margin:6px 44px 2px 0}
+  h3{font-size:15px;margin:18px 0 8px}
+  .sub{color:var(--muted);font-size:13px}
+  .muted{color:var(--muted);font-size:13px}
+  .stats{display:flex;gap:10px;margin:12px 0}
+  .stat{flex:1;background:var(--soft);border-radius:12px;padding:10px;text-align:center;font-size:13px}
+  .stat .big{font-size:28px;font-weight:800;line-height:1.1}
+  .stat small{display:block;color:var(--muted);margin-top:2px}
+  .label{font-weight:600;font-size:14px;margin:6px 0}
+  .rate{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+  .rate button{border:2px solid var(--c);background:transparent;color:var(--text);border-radius:12px;padding:8px 0;
+    display:flex;flex-direction:column;align-items:center;gap:2px}
+  .rate button b{font-size:20px;color:var(--c)}
+  .rate button span{font-size:10.5px}
+  .rate button.sel{background:var(--c);color:#fff}
+  .rate button.sel b{color:#fff}
+  .hint{font-size:12px;color:var(--muted);min-height:16px;margin-top:4px}
+  .chk{display:flex;gap:8px;align-items:center;font-size:14px;margin:8px 0}
+  .chk input{width:20px;height:20px}
+  textarea,input[type=text]{width:100%;font:inherit;font-size:16px;border:1px solid var(--line);background:var(--bg);
+    color:var(--text);border-radius:10px;padding:10px;margin-top:8px;resize:vertical}
+  .primary{width:100%;margin-top:10px;border:none;background:var(--accent);color:#fff;font-weight:700;
+    padding:13px;border-radius:12px;font-size:16px}
+  .primary:disabled{opacity:.6}
+  .link{border:none;background:none;color:var(--accent);padding:4px 0;font-size:14px}
+  .cm{border-top:1px solid var(--line);padding:10px 0}
+  .cm[data-seg]{cursor:pointer}
+  .cm-h{display:flex;align-items:center;gap:8px;font-size:14px}
+  .cm-h .muted{margin-left:auto;font-size:12px}
+  .cm-st{font-size:12px;color:var(--muted);margin-top:3px}
+  .cm-t{margin-top:4px;font-size:14px;line-height:1.4;white-space:pre-wrap;word-wrap:break-word}
+  .chip{display:inline-block;min-width:22px;text-align:center;color:#fff;font-weight:700;border-radius:6px;padding:1px 6px;font-size:13px}
+  .tabs{display:flex;gap:6px;margin:10px 0 4px;overflow-x:auto}
+  .tabs button{border:1px solid var(--line);background:var(--soft);color:var(--text);border-radius:20px;padding:7px 12px;font-size:13px;white-space:nowrap}
+  .tabs button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .st-row{display:flex;align-items:center;gap:10px;border-top:1px solid var(--line);padding:10px 0;cursor:pointer}
+  .st-row .n{flex:1;font-size:14px}
+  .st-row .n small{display:block;color:var(--muted);font-size:12px}
+  .st-row .v{font-weight:800;font-size:18px}
+  .leaflet-control-attribution{font-size:9px}
+</style>
+</head>
+<body>
+
+<header id="top">
+  <div class="t">🛣️ Дороги Талдыкоргана</div>
+  <div id="cityStats">Загрузка…</div>
+  <div id="demo">Демо-режим: отзывы сохраняются только на этом телефоне. Подключите базу (см. README), чтобы их видели все.</div>
+</header>
+
+<div id="main">
+  <div id="map"></div>
+
+  <div id="legend">
+    Качество дороги
+    <div class="bar">
+      <span style="background:#dc2626"></span><span style="background:#f97316"></span><span style="background:#eab308"></span><span style="background:#84cc16"></span><span style="background:#16a34a"></span>
+    </div>
+    <div class="row"><span>плохо</span><span>хорошо</span></div>
+    <div class="row" style="margin-top:3px"><span><span style="display:inline-block;width:14px;height:4px;background:#6b7280;vertical-align:middle"></span> нет оценок</span></div>
+  </div>
+
+  <div id="fabs">
+    <button id="btnFeed" title="Отзывы и рейтинг улиц" aria-label="Отзывы и рейтинг улиц">💬</button>
+    <button id="btnLocate" title="Где я" aria-label="Показать моё местоположение">📍</button>
+  </div>
+
+  <div id="loading"><div class="box"><div class="spin"></div><div id="loadingText">Загружаем дороги города из OpenStreetMap…<br><small class="muted">Первый раз это может занять до минуты</small></div></div></div>
+</div>
+
+<section id="sheet" aria-live="polite">
+  <div class="head"><div class="grab"></div><button class="close" id="sheetClose" aria-label="Закрыть">✕</button></div>
+  <div id="sheetBody"></div>
+</section>
+
+<div id="toast"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+"use strict";
+
+/* =====================================================================
+   НАСТРОЙКИ — заполните после создания базы в Supabase (см. README.md).
+   Пока поля пустые, сайт работает в демо-режиме (отзывы видны только вам).
+   ===================================================================== */
+const CONFIG = {
+  SUPABASE_URL: "",   // например: "https://abcdefgh.supabase.co"
+  SUPABASE_KEY: "",   // ключ "anon" или "publishable" (он публичный, его можно хранить в коде)
+  CENTER: [45.0167, 78.3667],             // центр Талдыкоргана
+  BBOX: [44.965, 78.28, 45.085, 78.47],   // юг, запад, север, восток — область загрузки дорог
+};
+
+/* ---------- утилиты ---------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function lsGet(k, d){ try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch(e){ return d; } }
+function lsSet(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch(e){ return false; } }
+function plural(n, one, few, many){ const a = Math.abs(n) % 100, b = a % 10;
+  const w = (a > 10 && a < 20) ? many : (b > 1 && b < 5) ? few : (b === 1) ? one : many; return n + " " + w; }
+function fmtLen(m){ return m < 1000 ? "≈ " + Math.max(10, Math.round(m / 10) * 10) + " м" : "≈ " + (m / 1000).toFixed(1) + " км"; }
+function fmtDate(s){ try { return new Date(s).toLocaleString("ru-RU", {day:"numeric", month:"short", hour:"2-digit", minute:"2-digit"}); } catch(e){ return ""; } }
+let toastTimer;
+function toast(msg, ms){ const t = $("#toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), ms || 3000); }
+
+const DEVICE_ID = (() => {
+  let id = lsGet("device_id", null);
+  if (!id) {
+    id = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2);
+    lsSet("device_id", id);
+  }
+  return id;
+})();
+
+/* ---------- цвета оценок ---------- */
+const LABELS = ["", "Ужасно", "Плохо", "Средне", "Хорошо", "Отлично"];
+const STOPS  = ["#dc2626", "#f97316", "#eab308", "#84cc16", "#16a34a"];
+const GREY = "#6b7280";
+function mix(a, b, t){
+  const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16);
+  const ch = sh => Math.round(((pa >> sh) & 255) * (1 - t) + ((pb >> sh) & 255) * t);
+  return "#" + ((1 << 24) | (ch(16) << 16) | (ch(8) << 8) | ch(0)).toString(16).slice(1);
+}
+function colorFor(avg){
+  if (!avg) return GREY;
+  const x = Math.min(4, Math.max(0, avg - 1)), i = Math.min(3, Math.floor(x));
+  return mix(STOPS[i], STOPS[i + 1], x - i);
+}
+function ratingColor(r){ const n = Math.round(Number(r)); return (n >= 1 && n <= 5) ? STOPS[n - 1] : GREY; }
+
+/* =====================================================================
+   ХРАНИЛИЩЕ ОТЗЫВОВ: Supabase (онлайн) или localStorage (демо)
+   ===================================================================== */
+// Приводим адрес к виду https://xxxx.supabase.co, даже если вставили его с лишним хвостом
+function normalizeSbUrl(u){
+  u = String(u || "").trim();
+  const dash = u.match(/supabase\.com\/dashboard\/project\/([a-z0-9]+)/i);   // ссылка на панель управления
+  if (dash) return "https://" + dash[1] + ".supabase.co";
+  u = u.replace(/[?#].*$/, "").replace(/\/(rest|auth|storage|realtime|functions)\/v1.*$/i, "").replace(/\/+$/, "");
+  if (u && !/^https?:\/\//i.test(u)) u = "https://" + u;
+  return u;
+}
+const SB_URL = normalizeSbUrl(CONFIG.SUPABASE_URL);
+const ONLINE = !!(SB_URL && CONFIG.SUPABASE_KEY);
+
+async function sb(path, opts){
+  opts = opts || {};
+  const headers = Object.assign({ apikey: CONFIG.SUPABASE_KEY, "Content-Type": "application/json" }, opts.headers || {});
+  // старые ключи (JWT, начинаются с eyJ) передаются ещё и в Authorization; новые sb_publishable_ — только в apikey
+  if (CONFIG.SUPABASE_KEY.startsWith("eyJ")) headers.Authorization = "Bearer " + CONFIG.SUPABASE_KEY;
+  const r = await fetch(SB_URL + "/rest/v1/" + path, Object.assign({}, opts, { headers }));
+  const text = await r.text();
+  if (!r.ok) {
+    let msg = text; try { msg = JSON.parse(text).message || text; } catch(e){}
+    let hint = "";
+    if (/invalid path/i.test(msg)) hint = " — проверьте SUPABASE_URL, он должен быть вида https://xxxx.supabase.co";
+    else if (r.status === 401 || /api key|apikey|jwt/i.test(msg)) hint = " — проверьте SUPABASE_KEY (нужен anon/publishable ключ)";
+    else if (/could not find the function|PGRST202/i.test(msg)) hint = " — выполните setup.sql в SQL Editor";
+    throw new Error("сервер ответил " + r.status + (msg ? ": " + msg : "") + hint);
+  }
+  return text ? JSON.parse(text) : null;
+}
+
+const onlineApi = {
+  async loadStats(){
+    const m = new Map();
+    for (let off = 0; ; off += 1000) {
+      const rows = await sb("rpc/get_stats?limit=1000&offset=" + off, { method: "POST", body: "{}" }) || [];
+      for (const r of rows) m.set(r.segment_id, { avg: Number(r.avg_rating), cnt: Number(r.cnt) });
+      if (rows.length < 1000) break;
+    }
+    return m;
+  },
+  async myRating(id){
+    const r = await sb("rpc/my_rating", { method: "POST", body: JSON.stringify({ p_segment_id: id, p_device: DEVICE_ID }) });
+    return r ? Number(r) : null;
+  },
+  async rate(ids, street, rating){
+    for (let i = 0; i < ids.length; i += 200) {
+      await sb("rpc/rate_segments", { method: "POST", body: JSON.stringify({
+        p_segment_ids: ids.slice(i, i + 200), p_street: street || null, p_device: DEVICE_ID, p_rating: rating }) });
+    }
+  },
+  async addComment(c){ await sb("comments", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify(c) }); },
+  getComments(id){ return sb("comments?select=*&segment_id=eq." + encodeURIComponent(id) + "&order=created_at.desc&limit=100"); },
+  getStreetComments(name){ return sb("comments?select=*&street=eq." + encodeURIComponent(name) + "&order=created_at.desc&limit=100"); },
+  getLatest(n){ return sb("comments?select=*&order=created_at.desc&limit=" + n); },
+};
+
+const localApi = {
+  async loadStats(){ const r = lsGet("demo_ratings", {}), m = new Map();
+    for (const id in r) m.set(id, { avg: r[id], cnt: 1 }); return m; },
+  async myRating(id){ return lsGet("demo_ratings", {})[id] || null; },
+  async rate(ids, street, rating){ const r = lsGet("demo_ratings", {}); for (const id of ids) r[id] = rating; lsSet("demo_ratings", r); },
+  async addComment(c){ const a = lsGet("demo_comments", []); a.unshift(Object.assign({}, c, { created_at: new Date().toISOString() }));
+    lsSet("demo_comments", a.slice(0, 500)); },
+  async getComments(id){ return lsGet("demo_comments", []).filter(c => c.segment_id === id); },
+  async getStreetComments(n){ return lsGet("demo_comments", []).filter(c => c.street === n); },
+  async getLatest(n){ return lsGet("demo_comments", []).slice(0, n); },
+};
+const api = ONLINE ? onlineApi : localApi;
+if (!ONLINE) $("#demo").style.display = "block";
+
+/* =====================================================================
+   ДОРОГИ: загрузка из OpenStreetMap и разбивка на отрезки между перекрёстками
+   ===================================================================== */
+const HIGHWAYS = "motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link";
+const OVERPASS = [
+  "https://overpass-api.de/api/interpreter",
+  "https://overpass.kumi.systems/api/interpreter",
+  "https://overpass.private.coffee/api/interpreter",
+];
+const ROADS_CACHE = "roads_cache_v1";
+const HW_NAMES = { motorway:"автомагистраль", trunk:"магистраль", primary:"главная дорога", secondary:"крупная улица",
+  tertiary:"городская улица", unclassified:"местная дорога", residential:"жилая улица", living_street:"жилая зона" };
+
+const r5 = x => Math.round(x * 1e5) / 1e5;
+
+function buildSegments(elements){
+  const ways = elements.filter(e => e.type === "way" && Array.isArray(e.geometry) && e.geometry.length > 1);
+  // сколько дорог проходит через каждую точку — там, где больше одной, перекрёсток
+  const usage = new Map();
+  for (const w of ways) if (Array.isArray(w.nodes)) for (const n of new Set(w.nodes)) usage.set(n, (usage.get(n) || 0) + 1);
+  const segs = [];
+  for (const w of ways) {
+    const t = w.tags || {};
+    const name = t["name:ru"] || t.name || t["name:kk"] || "";
+    const g = w.geometry;
+    const canSplit = Array.isArray(w.nodes) && w.nodes.length === g.length && g.every(p => p && p.lat != null);
+    if (!canSplit) {
+      const pts = g.filter(p => p && p.lat != null).map(p => [r5(p.lat), r5(p.lon)]);
+      if (pts.length > 1) segs.push({ id: w.id + "-0", n: name, h: t.highway, p: pts });
+      continue;
+    }
+    let start = 0, idx = 0;
+    for (let i = 1; i < g.length; i++) {
+      const last = i === g.length - 1;
+      if (last || usage.get(w.nodes[i]) >= 2) {
+        const pts = g.slice(start, i + 1).map(p => [r5(p.lat), r5(p.lon)]);
+        segs.push({ id: w.id + "-" + idx, n: name, h: t.highway, p: pts });
+        idx++; start = i;
+      }
+    }
+  }
+  return segs;
+}
+
+async function loadRoads(){
+  // 1) файл roads.json рядом с сайтом (самый быстрый вариант, см. README)
+  try { const r = await fetch("roads.json", { cache: "no-cache" }); if (r.ok) { const d = await r.json(); if (Array.isArray(d) && d.length) return d; } } catch(e){}
+  // 2) кэш в телефоне (7 дней)
+  const c = lsGet(ROADS_CACHE, null);
+  if (c && Array.isArray(c.d) && Date.now() - c.t < 7 * 864e5) return c.d;
+  // 3) OpenStreetMap (Overpass API), пробуем несколько серверов
+  const b = CONFIG.BBOX;
+  const q = '[out:json][timeout:90];way["highway"~"^(' + HIGHWAYS + ')$"](' + b.join(",") + ');out geom;';
+  let lastErr = null;
+  for (const ep of OVERPASS) {
+    try {
+      const r = await fetch(ep, { method: "POST", body: "data=" + encodeURIComponent(q),
+        headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+      if (!r.ok) { lastErr = new Error("Overpass " + r.status); continue; }
+      const j = await r.json();
+      const d = buildSegments(j.elements || []);
+      if (!d.length) { lastErr = new Error("пустой ответ"); continue; }
+      lsSet(ROADS_CACHE, { t: Date.now(), d });
+      return d;
+    } catch(e) { lastErr = e; }
+  }
+  throw lastErr || new Error("не удалось загрузить дороги");
+}
+
+function lenOf(p){
+  let d = 0; const R = 6371000, k = Math.PI / 180;
+  for (let i = 1; i < p.length; i++) {
+    const [a, b] = p[i - 1], [c, e] = p[i];
+    const x = Math.sin((c - a) * k / 2) ** 2 + Math.cos(a * k) * Math.cos(c * k) * Math.sin((e - b) * k / 2) ** 2;
+    d += 2 * R * Math.asin(Math.sqrt(x));
+  }
+  return d;
+}
+
+/* =====================================================================
+   КАРТА
+   ===================================================================== */
+const map = L.map("map", { zoomControl: false, preferCanvas: true, minZoom: 11, maxZoom: 19 }).setView(CONFIG.CENTER, 14);
+L.control.zoom({ position: "topright" }).addTo(map);
+// Подложка карты: OpenStreetMap (бесплатно, без ключа). Если основной сервер не отвечает — переключаемся на запасной.
+const OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+const TILE_SOURCES = [
+  { url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", opts: { maxZoom: 19, attribution: OSM_ATTR } },
+  { url: "https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png", opts: { subdomains: "abc", maxZoom: 19, attribution: OSM_ATTR + ', tiles: OSM France' } },
+];
+let tileIdx = 0, tileErrors = 0, tileLayer = null;
+function useTiles(i){
+  if (tileLayer) map.removeLayer(tileLayer);
+  tileIdx = i; tileErrors = 0;
+  tileLayer = L.tileLayer(TILE_SOURCES[i].url, TILE_SOURCES[i].opts).addTo(map);
+  tileLayer.on("tileerror", () => { if (++tileErrors > 6 && tileIdx + 1 < TILE_SOURCES.length) useTiles(tileIdx + 1); });
+}
+useTiles(0);
+map.createPane("me").style.zIndex = 650;
+const roadRenderer = L.canvas({ padding: 0.5, tolerance: 16 });   // tolerance — легче попасть пальцем по дороге
+
+let SEGS = [];
+const BY_ID = new Map();
+const BY_STREET = new Map();
+let STATS = new Map();
+let selected = null, highlight = null, chosen = 0;
+
+function weightFor(h){
+  if (/^(motorway|trunk|primary)/.test(h)) return 6;
+  if (/^secondary/.test(h)) return 5.5;
+  if (/^tertiary/.test(h)) return 5;
+  return 4;
+}
+function styleSeg(s){
+  const st = STATS.get(s.id);
+  s.layer.setStyle({ color: st ? colorFor(st.avg) : GREY, opacity: st ? 0.95 : 0.7, weight: weightFor(s.h) + (st ? 1.5 : 0) });
+}
+function drawRoads(segs){
+  SEGS = segs;
+  for (const s of segs) {
+    s.len = lenOf(s.p);
+    BY_ID.set(s.id, s);
+    if (s.n) { if (!BY_STREET.has(s.n)) BY_STREET.set(s.n, []); BY_STREET.get(s.n).push(s); }
+    let a = Infinity, b = Infinity, c = -Infinity, d = -Infinity;
+    for (const [la, lo] of s.p) { if (la < a) a = la; if (lo < b) b = lo; if (la > c) c = la; if (lo > d) d = lo; }
+    s.bb = [a, b, c, d];
+    // interactive:false — нажатия обрабатываем сами (см. «НАЖАТИЯ НА ДОРОГИ»), так надёжнее на телефонах
+    s.layer = L.polyline(s.p, { renderer: roadRenderer, color: GREY, weight: weightFor(s.h), opacity: 0.7, lineCap: "round", interactive: false }).addTo(map);
+  }
+}
+function setHighlight(lines){
+  if (highlight) map.removeLayer(highlight);
+  highlight = L.polyline(lines, { renderer: roadRenderer, color: "#2563eb", weight: 14, opacity: 0.35, interactive: false, lineCap: "round" }).addTo(map);
+}
+function clearHighlight(){ if (highlight) { map.removeLayer(highlight); highlight = null; } }
+
+function streetStats(name){
+  const list = BY_STREET.get(name) || [];
+  let sum = 0, cnt = 0, rated = 0;
+  for (const s of list) { const st = STATS.get(s.id); if (st) { sum += st.avg * st.cnt; cnt += st.cnt; rated++; } }
+  return { avg: cnt ? sum / cnt : null, cnt, rated, total: list.length };
+}
+function updateCityStats(){
+  let sum = 0, cnt = 0, rated = 0;
+  for (const [id, st] of STATS) if (BY_ID.has(id)) { sum += st.avg * st.cnt; cnt += st.cnt; rated++; }
+  $("#cityStats").innerHTML = cnt
+    ? 'Средняя оценка дорог города: <b style="color:' + colorFor(sum / cnt) + '">' + (sum / cnt).toFixed(1) + '</b> из 5 · оценено ' + plural(rated, "отрезок", "отрезка", "отрезков")
+    : "Оценок пока нет — нажмите на любую серую линию дороги, чтобы оценить её";
+  $("#cityStats").title = "Загружено отрезков дорог: " + SEGS.length;
+}
+async function refreshStats(){
+  try { STATS = await api.loadStats(); }
+  catch(e) { console.error(e); toast("Не удалось загрузить оценки: " + e.message, 5000); return; }
+  for (const s of SEGS) styleSeg(s);
+  updateCityStats();
+}
+
+/* =====================================================================
+   ПАНЕЛЬ ОТРЕЗКА: оценка + комментарии
+   ===================================================================== */
+const sheet = $("#sheet"), body = $("#sheetBody");
+function openSheet(){ sheet.classList.add("open"); body.scrollTop = 0; }
+function closeSheet(){ sheet.classList.remove("open"); selected = null; clearHighlight(); }
+$("#sheetClose").onclick = closeSheet;
+
+/* ---------- НАЖАТИЯ НА ДОРОГИ: ищем ближайший к пальцу/курсору отрезок ---------- */
+function distToSeg(p, a, b){
+  const dx = b.x - a.x, dy = b.y - a.y, l = dx * dx + dy * dy;
+  let t = l ? ((p.x - a.x) * dx + (p.y - a.y) * dy) / l : 0;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(a.x + t * dx - p.x, a.y + t * dy - p.y);
+}
+function hitTest(cp, tol){
+  const sw = map.containerPointToLatLng([cp.x - tol, cp.y + tol]);
+  const ne = map.containerPointToLatLng([cp.x + tol, cp.y - tol]);
+  let best = null, bestD = Infinity;
+  for (const s of SEGS) {
+    const b = s.bb;
+    if (b[2] < sw.lat || b[0] > ne.lat || b[3] < sw.lng || b[1] > ne.lng) continue;
+    let prev = map.latLngToContainerPoint(s.p[0]);
+    for (let i = 1; i < s.p.length; i++) {
+      const cur = map.latLngToContainerPoint(s.p[i]);
+      const dd = distToSeg(cp, prev, cur);
+      if (dd < bestD) { bestD = dd; best = s; }
+      prev = cur;
+    }
+  }
+  return bestD <= tol ? best : null;
+}
+(function setupTaps(){
+  const el = map.getContainer();
+  const active = new Set();
+  let tap = null;
+  const opt = { capture: true, passive: true };
+  el.addEventListener("pointerdown", e => {
+    active.add(e.pointerId);
+    tap = (active.size === 1 && !e.target.closest(".leaflet-control") && (e.pointerType !== "mouse" || e.button === 0))
+      ? { x: e.clientX, y: e.clientY, t: Date.now(), type: e.pointerType } : null;
+  }, opt);
+  el.addEventListener("pointermove", e => {
+    if (tap && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) > 14) tap = null;   // это сдвиг карты, а не нажатие
+  }, opt);
+  el.addEventListener("pointerup", e => {
+    active.delete(e.pointerId);
+    const t = tap; tap = null;
+    if (!t || Date.now() - t.t > 800 || !SEGS.length) return;
+    const r = el.getBoundingClientRect();
+    const s = hitTest(L.point(e.clientX - r.left, e.clientY - r.top), t.type === "mouse" ? 10 : 24);
+    if (s) selectSeg(s); else closeSheet();
+  }, opt);
+  el.addEventListener("pointercancel", e => { active.delete(e.pointerId); tap = null; }, opt);
+})();
+
+function commentHTML(c, withStreet){
+  const r = Math.round(Number(c.rating));
+  return '<div class="cm"' + (withStreet ? ' data-seg="' + esc(c.segment_id) + '"' : "") + '>' +
+    '<div class="cm-h">' + (r >= 1 && r <= 5 ? '<span class="chip" style="background:' + ratingColor(r) + '">' + r + '</span>' : "") +
+    '<b>' + esc(c.author || "Аноним") + '</b><span class="muted">' + esc(fmtDate(c.created_at)) + '</span></div>' +
+    (withStreet ? '<div class="cm-st">📍 ' + esc(c.street || "Дорога без названия") + '</div>' : "") +
+    '<div class="cm-t">' + esc(c.text) + '</div></div>';
+}
+function renderComments(list, target){
+  const el = target || $("#comments"); if (!el) return;
+  if (list == null) { el.innerHTML = '<div class="muted">Не удалось загрузить комментарии</div>'; return; }
+  el.innerHTML = list.length ? list.map(c => commentHTML(c, false)).join("") : '<div class="muted">Комментариев пока нет — будьте первым.</div>';
+}
+
+async function selectSeg(s, fly){
+  selected = s; chosen = 0;
+  setHighlight(s.p);
+  if (fly) map.fitBounds(s.layer.getBounds(), { maxZoom: 17, padding: [60, 60] });
+  const st = STATS.get(s.id);
+  const ss = s.n ? streetStats(s.n) : null;
+  const nSeg = s.n ? (BY_STREET.get(s.n) || []).length : 1;
+  const authorSaved = lsGet("author", "");
+
+  body.innerHTML =
+    '<h2>' + esc(s.n || "Дорога без названия") + '</h2>' +
+    '<div class="sub">Выбран отрезок ' + fmtLen(s.len) + ' · ' + esc(HW_NAMES[s.h] || "съезд / развязка") + '</div>' +
+    '<div class="stats">' +
+      '<div class="stat"><div class="big" style="color:' + (st ? colorFor(st.avg) : GREY) + '">' + (st ? st.avg.toFixed(1) : "—") + '</div>этот отрезок<small>' + (st ? plural(st.cnt, "оценка", "оценки", "оценок") : "нет оценок") + '</small></div>' +
+      (ss ? '<div class="stat"><div class="big" style="color:' + (ss.avg ? colorFor(ss.avg) : GREY) + '">' + (ss.avg ? ss.avg.toFixed(1) : "—") + '</div>вся улица<small>оценено ' + ss.rated + ' из ' + ss.total + ' отр.</small></div>' : "") +
+    '</div>' +
+    '<div class="label">Ваша оценка этого отрезка</div>' +
+    '<div class="rate" id="rate">' + [1,2,3,4,5].map(i => '<button type="button" data-r="' + i + '" style="--c:' + STOPS[i-1] + '"><b>' + i + '</b><span>' + LABELS[i] + '</span></button>').join("") + '</div>' +
+    '<div class="hint" id="mine"></div>' +
+    (s.n && nSeg > 1 ? '<label class="chk"><input type="checkbox" id="whole"> Применить оценку ко всей улице (' + nSeg + ' отр.)</label>' : "") +
+    '<textarea id="cText" maxlength="500" rows="3" placeholder="Комментарий: ямы, разбитый асфальт, нет разметки, лужи…"></textarea>' +
+    '<input type="text" id="cAuthor" maxlength="40" placeholder="Ваше имя (необязательно)" value="' + esc(authorSaved) + '">' +
+    '<button class="primary" id="send">Отправить</button>' +
+    '<h3>Комментарии к отрезку</h3>' +
+    '<div id="comments" class="comments"><div class="muted">Загрузка…</div></div>' +
+    (s.n ? '<button class="link" id="streetComments">Показать все комментарии улицы «' + esc(s.n) + '»</button>' : "");
+  openSheet();
+
+  $("#rate").onclick = e => { const b = e.target.closest("button"); if (!b) return; chosen = Number(b.dataset.r); markChosen(); };
+  $("#send").onclick = send;
+  const whole = $("#whole");
+  if (whole) whole.onchange = () => setHighlight(whole.checked ? BY_STREET.get(s.n).map(x => x.p) : s.p);
+  const sc = $("#streetComments");
+  if (sc) sc.onclick = async () => {
+    sc.textContent = "Загрузка…";
+    try { const list = await api.getStreetComments(s.n);
+      if (selected !== s) return;
+      $("#comments").previousElementSibling.textContent = "Все комментарии улицы";
+      renderComments(list); sc.remove();
+    } catch(e) { sc.textContent = "Ошибка загрузки"; }
+  };
+
+  const [mine, comments] = await Promise.all([
+    api.myRating(s.id).catch(() => null),
+    api.getComments(s.id).catch(e => { console.error(e); return null; }),
+  ]);
+  if (selected !== s) return;
+  if (mine && !chosen) { chosen = mine; markChosen(); $("#mine").textContent = "Ваша прошлая оценка: " + mine + " — её можно изменить"; }
+  renderComments(comments);
+}
+function markChosen(){
+  document.querySelectorAll("#rate button").forEach(b => b.classList.toggle("sel", Number(b.dataset.r) === chosen));
+}
+
+let sending = false;
+async function send(){
+  const s = selected; if (!s || sending) return;
+  const text = $("#cText").value.trim();
+  const author = $("#cAuthor").value.trim();
+  if (!chosen && !text) { toast("Поставьте оценку или напишите комментарий"); return; }
+  const whole = $("#whole") && $("#whole").checked;
+  const btn = $("#send"); sending = true; btn.disabled = true; btn.textContent = "Отправка…";
+  try {
+    lsSet("author", author);
+    if (chosen) await api.rate(whole ? BY_STREET.get(s.n).map(x => x.id) : [s.id], s.n, chosen);
+    if (text) await api.addComment({ segment_id: s.id, street: s.n || null, author: author || null, text, rating: chosen || null });
+    toast("Спасибо! Отзыв сохранён ✅");
+    await refreshStats();
+    if (selected === s) await selectSeg(s);
+  } catch(e) {
+    console.error(e); toast("Ошибка: " + e.message, 6000);
+    if (btn.isConnected) { btn.disabled = false; btn.textContent = "Отправить"; }
+  } finally { sending = false; }
+}
+
+/* =====================================================================
+   ЛЕНТА: последние отзывы, худшие и лучшие улицы
+   ===================================================================== */
+async function openFeed(){
+  selected = null; clearHighlight();
+  body.innerHTML = '<h2>Отзывы и рейтинг</h2>' +
+    '<div class="tabs" id="tabs"><button data-t="latest" class="on">Последние отзывы</button><button data-t="worst">Худшие улицы</button><button data-t="best">Лучшие улицы</button></div>' +
+    '<div id="feedList"><div class="muted">Загрузка…</div></div>';
+  openSheet();
+  $("#tabs").onclick = e => { const b = e.target.closest("button"); if (!b) return;
+    document.querySelectorAll("#tabs button").forEach(x => x.classList.toggle("on", x === b)); showTab(b.dataset.t); };
+  showTab("latest");
+}
+async function showTab(t){
+  const el = $("#feedList"); if (!el) return;
+  if (t === "latest") {
+    el.innerHTML = '<div class="muted">Загрузка…</div>';
+    let list; try { list = await api.getLatest(50); } catch(e) { el.innerHTML = '<div class="muted">Ошибка: ' + esc(e.message) + '</div>'; return; }
+    if (!$("#feedList")) return;
+    el.innerHTML = list.length ? list.map(c => commentHTML(c, true)).join("") : '<div class="muted">Отзывов пока нет.</div>';
+    el.onclick = e => { const d = e.target.closest("[data-seg]"); if (!d) return;
+      const s = BY_ID.get(d.dataset.seg); if (s) selectSeg(s, true); else toast("Этот отрезок не найден на карте"); };
+    return;
+  }
+  const rows = [];
+  for (const [name] of BY_STREET) { const ss = streetStats(name); if (ss.cnt) rows.push(Object.assign({ name }, ss)); }
+  rows.sort((a, b) => t === "worst" ? a.avg - b.avg || b.cnt - a.cnt : b.avg - a.avg || b.cnt - a.cnt);
+  el.innerHTML = rows.length ? rows.slice(0, 30).map((r, i) =>
+    '<div class="st-row" data-street="' + esc(r.name) + '"><div class="n">' + (i + 1) + '. ' + esc(r.name) +
+    '<small>' + plural(r.cnt, "оценка", "оценки", "оценок") + ' · оценено ' + r.rated + ' из ' + r.total + ' отр.</small></div>' +
+    '<div class="v" style="color:' + colorFor(r.avg) + '">' + r.avg.toFixed(1) + '</div></div>').join("")
+    : '<div class="muted">Пока нет оценённых улиц.</div>';
+  el.onclick = e => { const d = e.target.closest("[data-street]"); if (!d) return;
+    const list = (BY_STREET.get(d.dataset.street) || []).filter(s => STATS.has(s.id));
+    if (!list.length) return;
+    list.sort((a, b) => t === "worst" ? STATS.get(a.id).avg - STATS.get(b.id).avg : STATS.get(b.id).avg - STATS.get(a.id).avg);
+    map.fitBounds(L.featureGroup(BY_STREET.get(d.dataset.street).map(s => s.layer)).getBounds(), { maxZoom: 16, padding: [40, 40] });
+    selectSeg(list[0]);
+  };
+}
+$("#btnFeed").onclick = openFeed;
+
+/* =====================================================================
+   ГЕОЛОКАЦИЯ — синяя точка «я здесь»
+   ===================================================================== */
+let watchId = null, lastPos = null, meDot = null, meAcc = null, centerNext = false;
+function inCity(ll){ const b = CONFIG.BBOX; return ll[0] > b[0] && ll[0] < b[2] && ll[1] > b[1] && ll[1] < b[3]; }
+function locate(center){
+  if (!("geolocation" in navigator)) { if (center) toast("Браузер не поддерживает геолокацию"); return; }
+  if (center && lastPos) { map.setView(lastPos, Math.max(map.getZoom(), 16)); return; }
+  centerNext = !!center;
+  if (watchId === null) watchId = navigator.geolocation.watchPosition(onPos, onPosErr, { enableHighAccuracy: true, maximumAge: 15000, timeout: 30000 });
+}
+function onPos(p){
+  const ll = [p.coords.latitude, p.coords.longitude], first = !lastPos;
+  lastPos = ll;
+  if (!meDot) {
+    meAcc = L.circle(ll, { pane: "me", radius: p.coords.accuracy, color: "#2563eb", weight: 1, fillOpacity: 0.1, interactive: false }).addTo(map);
+    meDot = L.circleMarker(ll, { pane: "me", radius: 8, color: "#fff", weight: 3, fillColor: "#2563eb", fillOpacity: 1, interactive: false }).addTo(map);
+  } else { meDot.setLatLng(ll); meAcc.setLatLng(ll).setRadius(p.coords.accuracy); }
+  if (centerNext || (first && inCity(ll))) { map.setView(ll, 16); centerNext = false; }
+  $("#btnLocate").classList.add("on");
+}
+function onPosErr(e){
+  if (e.code === 1) {
+    if (centerNext) toast("Доступ к местоположению запрещён. Разрешите его в настройках браузера.", 5000);
+    navigator.geolocation.clearWatch(watchId); watchId = null;
+  } else if (centerNext) toast("Не удалось определить местоположение");
+  centerNext = false;
+}
+$("#btnLocate").onclick = () => locate(true);
+
+/* =====================================================================
+   ЗАПУСК
+   ===================================================================== */
+async function start(){
+  $("#loading").style.display = "flex";
+  $("#loadingText").innerHTML = 'Загружаем дороги города из OpenStreetMap…<br><small class="muted">Первый раз это может занять до минуты</small>';
+  let segs;
+  try { segs = await loadRoads(); }
+  catch(e) {
+    console.error(e);
+    $("#loadingText").innerHTML = 'Не удалось загрузить карту дорог (' + esc(e.message) + ').<br><button class="primary" id="retry">Повторить</button>';
+    $("#retry").onclick = start; return;
+  }
+  drawRoads(segs);
+  $("#loading").style.display = "none";
+  await refreshStats();
+  // ?export=1 в адресе — скачать roads.json, чтобы положить его в репозиторий (ускоряет загрузку)
+  if (/[?&]export=1/.test(location.search)) {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(segs.map(s => ({ id: s.id, n: s.n, h: s.h, p: s.p })))], { type: "application/json" }));
+    a.download = "roads.json"; a.textContent = "⬇ Скачать roads.json";
+    a.style.cssText = "display:block;color:#fff;margin-top:6px;font-weight:700";
+    $("#top").appendChild(a);
+  }
+  setInterval(() => { if (!document.hidden) refreshStats(); }, 120000);
+}
+locate(false);
+start();
+</script>
+</body>
+</html>
